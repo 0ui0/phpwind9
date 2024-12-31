@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+<template source='TPL:admin.common.head' />
+</head>
+<body>
+<div class="wrap">
+	<div class="nav">
+        <ul class="cc">
+			<!--# foreach($addons as $key => $value){ #-->
+			<li><a href="{@url:appcenter/style/run?type=$key}">{$value[0]}</a></li>
+			<!--# } #-->
+			<li class="current"><a href="{@url:appcenter/style/install}">本地安装</a></li>
+			<li><a href="{@url:appcenter/style/manage}">界面管理</a></li>
+			<!--# if(Wekit::load('APPCENTER:service.srv.PwDebugApplication')->inDevMode1()){ #-->
+			<li><a href="{@url:appcenter/style/generate}">开发助手</a></li>
+			<!--# } #-->
+		</ul>
+	</div>
+	<div class="h_a">功能说明</div>
+	<div class="prompt_text">
+		<ul>
+			<li>可选择上传风格安装包来安装</li>
+			<li>也可选择未安装的模板列表来安装</li>
+		</ul>
+	</div>
+	<div class="h_a">模板安装</div>
+	<template source='installForm' />
+	<!--#if(empty($themes)) { #-->
+	<!--div class="not_content_mini"><i></i>无未安装模板</div-->
+	<!--# } else { #-->
+	<div class="h_a">未安装模板</div>
+	<!-- <form action="{@url:appcenter/style/doinstall}" method="post" > -->
+	<div class="table_full mb10">
+		<table width="100%">
+			<col class="th">
+			<col width="100">
+<!--#foreach ($themes as $k => $v){ #-->
+ 	<!--# foreach($v as $theme){ #-->
+			<tr>
+				<!-- <th><input type="checkbox" name="themes[]" value="THEMES:{@str_replace('/','.',$addons[$k][1]).'.'.$theme}"></th> -->
+				<th><span class="b mr10">{$theme}</span><a class="J_ajax_del w" data-pdata="{'folder': '{@str_replace('/','.',$addons[$k][1]).'.'.$theme}'}" href="{@url:appcenter/style/delFolder}">[删除]</a></th>
+				<td><span style="line-height:24px;">{$addons[$k][0]}</span></td>
+				<td><a class="J_ajax_refresh btn btn_submit" href="{@url:appcenter/style/doinstall}" data-pdata="{'themes[]': 'THEMES:{@str_replace('/','.',$addons[$k][1]).'.'.$theme}'}">安装</a></td>
+			</tr>
+	<!--# } #-->
+<!--# } #-->
+		</table>
+	</div>
+	<!-- <button type="submit" class="btn btn_submit">安装</button>
+	</form> -->
+	<!--# } #-->
+</div>
+<template source='TPL:admin.common.footer' />
+<script src="{@G:url.js}/util_libs/plupload/plupload.full.min.js"></script>
+<script src="{@G:url.js}/util_libs/plupload/zh_CN.js"></script>
+<script>
+/*
+ * 1、state = 'success' && step = '' 成功！
+ * 2、state = 'success' && step = 'num' 请求stepurl!
+ * 3、state = 'fail' 失败！
+ */
+var conf = {
+	stepUrl : '{@url:appcenter/app/doInstall}',
+	
+};
+$(function(){
+
+
+	var up_wrap = $('#J_up_wrap'),
+			uploader,
+			up_tip = $('#J_up_tip'),
+			up_file = $('#J_up_file'),
+			up_del = $('#J_up_del'),
+			up_btn = $('#J_upload_btn'),
+			file_input = $('#J_file_input');
+
+	//实例化一个plupload上传对象
+	uploader = new plupload.Uploader({
+		runtimes: 'html4',
+		browse_button: 'J_browse',
+		//触发文件选择对话框的按钮，为那个元素id
+		url: '{@url:appcenter/app/upload?_json=1}', //服务器端的上传页面地址
+		filters: {
+			// Specify what files to browse for
+			mime_types: [{
+				title: "zip文件",
+				extensions: "zip"
+			}]
+		}
+	});
+	//在实例对象上调用init()方法进行初始化
+	uploader.init();
+	uploader.bind('Error', function(uploader, errObject) {
+		alert('错误提示："'+errObject.file.name+'"'+errObject.message);
+	});
+	uploader.bind('FilesAdded', function(uploader, files) {
+		uploader.setOption('multipart_params', post_cookies());
+		$('#J_browse').attr('disabled', 'disabled').addClass('disabled');
+        up_tip.html('<span class="tips_loading">正在上传并校验</span>');
+		uploader.start(); //调用实例对象的start()方法开始上传文件
+	});
+	uploader.bind('FileUploaded', function(uploader, file, responseObject) { //绑定所有文件上传完成事件
+		try {
+			var file_detail = $('#' + file.id);
+			var data = $.parseJSON(responseObject.response),
+				_data = data.data;
+			if (data.state === 'success') {
+				file_input.val(_data.file);
+				up_wrap.hide();
+				up_tip.html('<span class="tips_success">上传成功</span>').show();
+				up_file.text(file.name).show();
+				up_del.show();
+				up_btn.css('visibility', 'visible'); //按钮可见
+			} else if (data.state === 'fail') {
+				up_tip.html('<span class="tips_error">' + data.message + '</span>').show();
+				uploader.files = array();;
+			}
+		} catch (ex) {
+			this.debug(ex);
+		}
+	});
+
+	//删除
+	up_del.on('click', function(e){
+		e.preventDefault();
+		$.post(this.href, {
+			file : file_input.val()
+		}, function(data){
+			if(data.state == 'success') {
+				window.location.href=window.location.href;
+			}else if(data.state == 'fail') {
+				Wind.use('dialog', function(){
+					Wind.dialog.alert(data.message);
+				});
+			}
+		}, 'json');
+		
+	});
+	
+});
+
+// 把cookies转化成对象
+function post_cookies(){
+    var cks = new Array();
+    cks['csrf_token'] =GV.TOKEN;
+    
+    var cookieAry = document.cookie.split("; ");//得到Cookie数组
+    for(var i=0;i<cookieAry.length;i++){
+            var temp = cookieAry[i].split("=");
+            cks[temp[0]]=temp[1];
+    }
+    var jsonStr = '{"siteId":1';
+    for(var k in cks){  
+          jsonStr += ', "'+k+'":"'+cks[k]+'"';
+    }  
+    jsonStr += '}';
+    
+    return eval('(' + jsonStr + ')');   
+}
+Wind.js(GV.JS_ROOT +"/pages/appcenter/admin/setUpApp.js?v="+ GV.JS_VERSION);
+</script>
+</body>
+</html>

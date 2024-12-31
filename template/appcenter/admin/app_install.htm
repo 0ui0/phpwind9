@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+<template source='TPL:admin.common.head' />
+<script src="{@G:url.js}/util_libs/plupload/plupload.full.min.js"></script>
+<script src="{@G:url.js}/util_libs/plupload/zh_CN.js"></script>
+</head>
+<body>
+<div class="wrap">
+	<div class="nav">
+		<ul class="cc">
+			<li><a href="{@url:appcenter/app/run}">已安装</a></li>
+			<li class="current"><a href="{@url:appcenter/app/install}">本地安装</a></li>
+			<!--# if(Wekit::load('APPCENTER:service.srv.PwDebugApplication')->inDevMode1()){ #-->
+			<li><a href="{@url:appcenter/develop/run}">开发助手</a></li>
+			<!--# } #-->
+		</ul>
+	</div>
+	<!--应用安装-->
+<div class="h_a">安装说明</div>
+<div class="prompt_text">
+		<ul>
+			<li>目前仅支持.zip压缩包</li>
+			<li>请上传压缩包，然后点立即安装开始安装流程</li>
+			<li>如果安装失败，可按照错误提示修复错误，然后选择重试</li>
+		</ul>
+</div>
+<div class="h_a">本地上传</div>
+<template source='installForm' />
+<!--# if($apps){ #-->
+<div class="h_a">未安装应用</div>
+	<div class="table_full mb10">
+		<table width="100%">
+			<col class="th" />
+<!--#foreach ($apps as $k => $v){ #-->
+			<tr>
+				<th><span class="b mr10">{$v}</span><a class="J_ajax_del w" href="{@url:appcenter/app/delFolder}" data-pdata="{'folder': '{$v}'}">[删除]</a></th>
+				<td><form action="{@url:appcenter/app/toInstall?apps[]=$v}" method="post" class="J_ajaxForm"><button class="btn btn_submit mr10 J_ajax_submit_btn" type="submit">安装</button></form></td>
+			</tr>
+<!--# } #-->
+		</table>
+	</div>
+	<!--button type="submit" class="btn btn_submit">安装</button-->
+<!--# } #-->
+<template source='TPL:admin.common.footer' />
+</div>
+<script>
+/*
+ * 1、state = 'success' && step = '' 成功！
+ * 2、state = 'success' && step = 'num' 请求stepurl!
+ * 3、state = 'fail' 失败！
+ */
+$(function() {
+	var up_wrap = $('#J_up_wrap'),
+        uploader,
+		up_tip = $('#J_up_tip'),
+		up_file = $('#J_up_file'),
+		up_del = $('#J_up_del'),
+		up_btn = $('#J_upload_btn'),
+		file_input = $('#J_file_input');
+	//实例化一个plupload上传对象
+	uploader = new plupload.Uploader({
+		runtimes: 'html4',
+		browse_button: 'J_browse',
+		//触发文件选择对话框的按钮，为那个元素id
+		url: '{@url:appcenter/app/upload?_json=1}', //服务器端的上传页面地址
+		filters: {
+			// Specify what files to browse for
+			mime_types: [{
+				title: "zip文件",
+				extensions: "zip"
+			}]
+		}
+	});
+	//在实例对象上调用init()方法进行初始化
+	uploader.init();
+	uploader.bind('Error', function(uploader, errObject) {
+		alert('错误提示："'+errObject.file.name+'"'+errObject.message);
+	});
+	uploader.bind('FilesAdded', function(uploader, files) {
+		uploader.setOption('multipart_params', post_cookies());
+		$('#J_browse').attr('disabled', 'disabled').addClass('disabled');
+        up_tip.html('<span class="tips_loading">正在上传并校验</span>').show();
+		uploader.start(); //调用实例对象的start()方法开始上传文件
+	});
+	uploader.bind('FileUploaded', function(uploader, file, responseObject) { //绑定所有文件上传完成事件
+		try {
+			var file_detail = $('#' + file.id);
+			var data = $.parseJSON(responseObject.response),
+				_data = data.data;
+			if (data.state === 'success') {
+				file_input.val(_data.file);
+				up_wrap.hide();
+				up_tip.html('<span class="tips_success">上传成功</span>').show();
+				up_file.text(file.name).show();
+				up_del.show();
+				up_btn.css('visibility', 'visible'); //按钮可见
+			} else if (data.state === 'fail') {
+				up_tip.html('<span class="tips_error">' + data.message + '</span>').show();
+				uploader.files = array();;
+			}
+		} catch (ex) {
+			this.debug(ex);
+		}
+	});
+	//删除
+	up_del.on('click', function(e) {
+		e.preventDefault();
+		$.post(this.href, {
+			file: file_input.val()
+		}, function(data) {
+			if (data.state == 'success') {
+				window.location.href = window.location.href;
+			} else if (data.state == 'fail') {
+				Wind.use('dialog', function() {
+					Wind.dialog.alert(data.message);
+				});
+			}
+		}, 'json');
+	});
+});
+
+// 把cookies转化成对象
+function post_cookies(){
+    var cks = new Array();
+    cks['csrf_token'] =GV.TOKEN;
+    
+    var cookieAry = document.cookie.split("; ");//得到Cookie数组
+    for(var i=0;i<cookieAry.length;i++){
+            var temp = cookieAry[i].split("=");
+            cks[temp[0]]=temp[1];
+    }
+    var jsonStr = '{"siteId":1';
+    for(var k in cks){  
+          jsonStr += ', "'+k+'":"'+cks[k]+'"';
+    }  
+    jsonStr += '}';
+    
+    return eval('(' + jsonStr + ')');   
+}
+
+Wind.js(GV.JS_ROOT +"/pages/appcenter/admin/setUpApp.js?v="+ GV.JS_VERSION);
+</script>
+</body>
+</html>
